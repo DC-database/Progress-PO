@@ -316,3 +316,26 @@ nav button.active {
   color: white;
   border: none;
 }
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+.page-background {
+  background-color: #e6f2ff;
+  min-height: 100vh;
+  padding: 0;
+  margin: 0;
+}
+
+.page-container {
+  max-width: 100%;
+  margin: 0 auto;
+  background-color: white;
+  padding: 40px 20px;
+}
+
+th {
+  text-align: left;
+}
