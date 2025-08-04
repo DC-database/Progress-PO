@@ -148,11 +148,14 @@ function showTab(tabId) {
   }
 }
 
+
 document.getElementById("searchBox").addEventListener("keyup", function(event) {
   if (event.key === "Enter") {
     searchRecords();
+    document.getElementById('searchBox').value = ''; // clear after search
   }
 });
+
 
 window.onload = generateAZFilter;
 
@@ -201,4 +204,53 @@ function proceedDelete() {
 function cancelDelete() {
   deleteKeyPending = null;
   document.getElementById("deleteConfirmModal").classList.add("hidden");
+}
+
+
+
+function promptAddPO() {
+  if (!auth.currentUser) {
+    alert("Only admin can add PO");
+    return;
+  }
+
+  const po = prompt("Enter PO number to add:");
+  if (!po) return;
+
+  const masterRef = firebase.database().ref('master-po/' + po);
+  const recordsRef = firebase.database().ref('records');
+
+  masterRef.once('value').then(snapshot => {
+    if (!snapshot.exists()) {
+      alert("PO not found in master list");
+      return;
+    }
+
+    recordsRef.orderByChild("PO").equalTo(po).once('value', recordSnap => {
+      if (recordSnap.exists()) {
+        alert("PO already exists in records");
+      } else {
+        const data = snapshot.val();
+        recordsRef.push(data).then(() => {
+          alert("PO added to records");
+          // Append only this entry to the existing table
+          const tbody = document.querySelector('#poTable tbody');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${data.Site}</td><td>${data.PO}</td><td>${data.IDNo}</td><td>${data.Vendor}</td><td>${formatNumber(data.Value)}</td><td><button onclick="showDeleteConfirmByPO('${data.PO}')">Delete</button></td>`;
+          tbody.appendChild(tr);
+        });
+      }
+    });
+  });
+}
+
+
+function showDeleteConfirmByPO(poNumber) {
+  firebase.database().ref('records').orderByChild("PO").equalTo(poNumber).once('value', snapshot => {
+    if (snapshot.exists()) {
+      snapshot.forEach(child => {
+        showDeleteConfirm(child.key);
+      });
+    }
+  });
 }
