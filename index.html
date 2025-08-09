@@ -46,14 +46,18 @@
     <button onclick="logout()">Logout</button>
 
     <div id="adminSection" class="hidden">
-      <h3>Upload Master PO (Admin Only)</h3>
-      <input type="file" id="masterUpload" />
-      <button onclick="uploadMasterPO()">Upload Master PO</button>
-      <button onclick="deleteAllMasterPO()">Delete All Master PO</button>
-      <h2>Admin Panel</h2>
-      <input type="file" id="csvUpload" />
-      <button onclick="uploadCSV()">Upload CSV</button>
-      <button onclick="downloadTemplate()">Download Template</button>
+
+<h3>Upload Master PO (Admin Only)</h3>
+<input type="file" id="masterUpload" />
+<button onclick="uploadMasterPO()">Upload Master PO</button>
+<button onclick="downloadMasterTemplate()">Download Master Template</button>
+<button onclick="deleteAllMasterPO()">Delete All Master PO</button>
+
+<h2>Admin Panel</h2>
+<input type="file" id="csvUpload" />
+<button onclick="uploadCSV()">Upload CSV</button>
+<button onclick="downloadMainTemplate()">Download Main Template</button>
+
     </div>
   </div>
 
