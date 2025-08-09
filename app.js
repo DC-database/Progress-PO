@@ -1,6 +1,17 @@
 let currentVendorFilter = null;
 let currentSearchTerm = "";
 
+// keep a cache of the last rendered rows (by key) so we can add them to collection
+const lastRenderedRows = {};
+
+// selected collection persisted in localStorage
+let selectedPOs = {};
+try {
+  selectedPOs = JSON.parse(localStorage.getItem('selectedPOs') || '{}');
+} catch (e) {
+  selectedPOs = {};
+}
+
 // --- Firebase ---
 const firebaseConfig = {
   apiKey: "AIzaSyC7cfmocz3oPyERDIiJj5XIDeA3wc6rQZI",
@@ -17,11 +28,10 @@ const auth = firebase.auth();
 const db = firebase.database();
 const storage = firebase.storage();
 
-// Show/hide admin section
+// Show/hide admin section + login button state
 auth.onAuthStateChanged(user => {
   document.getElementById('adminSection')?.classList.toggle('hidden', !user);
 
-  // Update login button UI
   const btn = document.getElementById('loginBtn');
   if (btn) {
     btn.textContent = user ? "Logout" : "Login";
@@ -39,7 +49,6 @@ function logout() { auth.signOut(); }
 
 // ---------- CSV helpers ----------
 function parseCSV(raw) {
-  // Simple parser for header-only or basic CSV w/out quoted commas
   return raw
     .replace(/\r/g, "")
     .split("\n")
@@ -72,7 +81,7 @@ function downloadCSV(name, headerLine) {
   URL.revokeObjectURL(url);
 }
 
-// ---------- Templates (both share the same header) ----------
+// ---------- Templates ----------
 function downloadMainTemplate() {
   downloadCSV("progress_po_template.csv", "Site,PO,ID No,Vendor,Value");
 }
@@ -100,9 +109,9 @@ function uploadCSV() {
         updates[ref.key] = { Site, PO, IDNo, Vendor, Value: toNumberOrRaw(Value) };
       }
     });
-    // Batch write
-    const refBase = db.ref('records');
-    refBase.update(updates).then(() => alert("Upload complete")).catch(err => alert(err.message));
+    db.ref('records').update(updates)
+      .then(() => alert("Upload complete"))
+      .catch(err => alert(err.message));
   };
   reader.readAsText(file);
 }
@@ -119,9 +128,6 @@ function uploadMasterPO() {
     if (!csvHeadersOK(rows)) {
       return alert('Invalid template. Header must be exactly: "Site,PO,ID No,Vendor,Value".');
     }
-
-    const uid = auth.currentUser?.uid || "";
-    console.log("Current UID:", uid);
 
     const body = rows.slice(1);
     const updates = {};
@@ -148,13 +154,65 @@ function deleteAllMasterPO() {
     .catch(err => alert(err.message));
 }
 
-// ---------- UI: A–Z filter, search, delete ----------
+// ---------- UI: Format ----------
 function formatNumber(val) {
   const num = parseFloat(val);
   if (isNaN(num)) return val ?? "";
   return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// ---- RESULT COUNT (only shown when > 0) ----
+function updateResultCount() {
+  const count = document.querySelectorAll('#poTable tbody tr').length;
+  const el = document.getElementById('resultCount');
+  if (!el) return;
+  el.textContent = count > 0 ? `Total Results: ${count}` : '';
+}
+
+// ---- COLLECTION helpers ----
+function persistSelected() {
+  localStorage.setItem('selectedPOs', JSON.stringify(selectedPOs));
+  updateSelectedCount();
+}
+function updateSelectedCount() {
+  const btn = document.getElementById('viewCollectionBtn');
+  if (btn) btn.textContent = `View (${Object.keys(selectedPOs).length})`;
+}
+function addCheckedToCollection() {
+  const checks = document.querySelectorAll('#poTable tbody input.rowSelect:checked');
+  if (!checks.length) { alert("No rows selected."); return; }
+  checks.forEach(chk => {
+    const key = chk.getAttribute('data-key');
+    if (key && lastRenderedRows[key]) {
+      selectedPOs[key] = lastRenderedRows[key];
+    }
+  });
+  persistSelected();
+  // keep them checked
+}
+function viewCollection() {
+  const tbody = document.querySelector('#poTable tbody');
+  tbody.innerHTML = '';
+  Object.keys(selectedPOs).forEach(key => {
+    // render using the same renderer; checkboxes will appear checked automatically
+    const tr = renderRow(key, selectedPOs[key]);
+    tbody.appendChild(tr);
+  });
+  updateResultCount();
+}
+function clearCollection() {
+  if (!confirm("Clear all items in the collection?")) return;
+  selectedPOs = {};
+  persistSelected();
+
+  // Uncheck all checkboxes in current table
+  document.querySelectorAll('#poTable tbody input.rowSelect').forEach(chk => {
+    chk.checked = false;
+  });
+
+  updateResultCount();
+}
+// ---------- A–Z filter, search ----------
 function generateAZFilter() {
   const container = document.getElementById("letterFilter");
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -167,23 +225,20 @@ function generateAZFilter() {
 }
 
 function renderRow(childKey, data) {
+  // cache for later retrieval when adding to collection
+  lastRenderedRows[childKey] = data;
+
+  const checked = selectedPOs[childKey] ? 'checked' : '';
   const tr = document.createElement('tr');
   tr.innerHTML =
-    `<td>${data.Site || ""}</td>
+    `<td><input type="checkbox" class="rowSelect" data-key="${childKey}" ${checked}></td>
+     <td>${data.Site || ""}</td>
      <td>${data.PO || ""}</td>
      <td>${data.IDNo || ""}</td>
      <td>${data.Vendor || ""}</td>
      <td>${formatNumber(data.Value)}</td>
      <td><button onclick="showDeleteConfirm('${childKey}')">Delete</button></td>`;
   return tr;
-}
-
-// ---- RESULT COUNT (only shown when > 0) ----
-function updateResultCount() {
-  const count = document.querySelectorAll('#poTable tbody tr').length;
-  const el = document.getElementById('resultCount');
-  if (!el) return;
-  el.textContent = count > 0 ? `Total Results: ${count}` : '';
 }
 
 function filterByVendorLetter(letter) {
@@ -251,6 +306,12 @@ function cancelDelete() {
 function deleteRecord(key) {
   if (auth.currentUser) {
     db.ref('records/' + key).remove().then(() => {
+      // also remove from collection if present
+      if (selectedPOs[key]) {
+        delete selectedPOs[key];
+        persistSelected();
+      }
+
       if (currentVendorFilter) filterByVendorLetter(currentVendorFilter);
       else if (currentSearchTerm !== "") searchRecords();
       else clearSearch();
@@ -277,11 +338,14 @@ function showTab(tabId) {
 document.getElementById("searchBox").addEventListener("keyup", function(event) {
   if (event.key === "Enter") {
     searchRecords();
-    document.getElementById('searchBox').value = ''; // clear after search
+    document.getElementById('searchBox').value = '';
   }
 });
 
-window.onload = generateAZFilter;
+window.onload = () => {
+  generateAZFilter();
+  updateSelectedCount(); // show persisted count on load
+};
 
 // ---------- Login modal ----------
 function toggleLoginModal() {
@@ -312,10 +376,12 @@ function promptAddPO() {
       if (recordSnap.exists()) return alert("PO already exists in records");
 
       const data = snapshot.val();
-      recordsRef.push(data).then(() => {
+      // Save and use the actual pushed key so checkbox + collection work correctly
+      const newRef = recordsRef.push();
+      newRef.set(data).then(() => {
         alert("PO added to records");
         const tbody = document.querySelector('#poTable tbody');
-        tbody.appendChild(renderRow("temp", data));
+        tbody.appendChild(renderRow(newRef.key, data));
         updateResultCount();
       });
     });
@@ -341,3 +407,7 @@ window.uploadMasterPO = uploadMasterPO;
 window.deleteAllMasterPO = deleteAllMasterPO;
 window.downloadMainTemplate = downloadMainTemplate;
 window.downloadMasterTemplate = downloadMasterTemplate;
+
+window.addCheckedToCollection = addCheckedToCollection;
+window.viewCollection = viewCollection;
+window.clearCollection = clearCollection;

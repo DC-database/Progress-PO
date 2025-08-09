@@ -339,3 +339,37 @@ body {
 th {
   text-align: left;
 }
+.actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.group-left, .group-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Distinct but on-theme buttons */
+.btn-collect {
+  background-color: #2E86C1;
+  border-color: #2E86C1;
+  font-weight: bold;
+}
+.btn-collect:hover { background-color: #1F5E86; }
+
+.btn-view {
+  background-color: #002F4A;
+  border-color: #002F4A;
+}
+.btn-view:hover { background-color: #002136; }
+
+.result-count {
+  font-weight: bold;
+  min-width: 140px;
+  text-align: right;
+}
