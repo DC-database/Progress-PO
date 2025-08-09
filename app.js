@@ -1,16 +1,16 @@
 let currentVendorFilter = null;
 let currentSearchTerm = "";
 
-// keep a cache of the last rendered rows (by key) so we can add them to collection
-const lastRenderedRows = {};
+// remember last PO searched (for WhatsApp auto request)
+let lastSearchPO = "";
 
-// selected collection persisted in localStorage
+// cache & collection
+const lastRenderedRows = {};
 let selectedPOs = {};
-try {
-  selectedPOs = JSON.parse(localStorage.getItem('selectedPOs') || '{}');
-} catch (e) {
-  selectedPOs = {};
-}
+try { selectedPOs = JSON.parse(localStorage.getItem('selectedPOs') || '{}'); } catch { selectedPOs = {}; }
+
+// WhatsApp target number
+const WHATSAPP_REQUEST_NUMBER = "5099 2079";
 
 // --- Firebase ---
 const firebaseConfig = {
@@ -49,338 +49,222 @@ function logout() { auth.signOut(); }
 
 // ---------- CSV helpers ----------
 function parseCSV(raw) {
-  return raw
-    .replace(/\r/g, "")
-    .split("\n")
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .map(l => l.split(",").map(v => v.trim()));
+  return raw.replace(/\r/g,"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>l.split(",").map(v=>v.trim()));
 }
-
 function csvHeadersOK(arr) {
   if (!arr || arr.length === 0) return false;
   const h = arr[0].map(x => x.toLowerCase());
   const want = ["site","po","id no","vendor","value"];
   return want.every((w,i) => (h[i] || "") === w);
 }
-
-function toNumberOrRaw(v) {
-  const n = parseFloat(v);
-  return isNaN(n) ? v : n;
-}
-
-function downloadCSV(name, headerLine) {
-  const blob = new Blob([headerLine + "\n"], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+function toNumberOrRaw(v){ const n=parseFloat(v); return isNaN(n)? v : n; }
+function downloadCSV(name, headerLine){
+  const blob=new Blob([headerLine+"\n"],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 
 // ---------- Templates ----------
-function downloadMainTemplate() {
-  downloadCSV("progress_po_template.csv", "Site,PO,ID No,Vendor,Value");
-}
-function downloadMasterTemplate() {
-  downloadCSV("master_po_template.csv", "Site,PO,ID No,Vendor,Value");
-}
+function downloadMainTemplate(){ downloadCSV("progress_po_template.csv","Site,PO,ID No,Vendor,Value"); }
+function downloadMasterTemplate(){ downloadCSV("master_po_template.csv","Site,PO,ID No,Vendor,Value"); }
 
 // ---------- Upload to records (Main) ----------
-function uploadCSV() {
-  const file = document.getElementById('csvUpload').files[0];
-  if (!file) return alert("Select a file");
-
-  const reader = new FileReader();
-  reader.onload = e => {
-    const rows = parseCSV(e.target.result);
-    if (!csvHeadersOK(rows)) {
-      return alert('Invalid template. Header must be exactly: "Site,PO,ID No,Vendor,Value".');
-    }
-    const body = rows.slice(1);
-    const updates = {};
-    body.forEach(cols => {
-      const [Site, PO, IDNo, Vendor, Value] = cols;
-      if (Site && PO) {
-        const ref = db.ref('records').push();
-        updates[ref.key] = { Site, PO, IDNo, Vendor, Value: toNumberOrRaw(Value) };
-      }
+function uploadCSV(){
+  const file=document.getElementById('csvUpload').files[0];
+  if(!file) return alert("Select a file");
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const rows=parseCSV(e.target.result);
+    if(!csvHeadersOK(rows)) return alert('Invalid template. Header must be exactly: "Site,PO,ID No,Vendor,Value".');
+    const body=rows.slice(1); const updates={};
+    body.forEach(cols=>{
+      const [Site,PO,IDNo,Vendor,Value]=cols;
+      if(Site && PO){ const ref=db.ref('records').push(); updates[ref.key]={Site,PO,IDNo,Vendor,Value:toNumberOrRaw(Value)}; }
     });
-    db.ref('records').update(updates)
-      .then(() => alert("Upload complete"))
-      .catch(err => alert(err.message));
+    db.ref('records').update(updates).then(()=>alert("Upload complete")).catch(err=>alert(err.message));
   };
   reader.readAsText(file);
 }
 
-// ---------- Upload to master-po (Admin) ----------
-function uploadMasterPO() {
-  const file = document.getElementById('masterUpload').files[0];
-  if (!file) return alert("Select a file");
-  if (!auth.currentUser) return alert("Login required.");
-
-  const reader = new FileReader();
-  reader.onload = async e => {
-    const rows = parseCSV(e.target.result);
-    if (!csvHeadersOK(rows)) {
-      return alert('Invalid template. Header must be exactly: "Site,PO,ID No,Vendor,Value".');
-    }
-
-    const body = rows.slice(1);
-    const updates = {};
-    body.forEach(cols => {
-      const [Site, PO, IDNo, Vendor, Value] = cols;
-      if (PO && Site) {
-        updates[PO] = { Site, PO, IDNo, Vendor, Value: toNumberOrRaw(Value) };
-      }
+// ---------- Upload to master-po ----------
+function uploadMasterPO(){
+  const file=document.getElementById('masterUpload').files[0];
+  if(!file) return alert("Select a file");
+  if(!auth.currentUser) return alert("Login required.");
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const rows=parseCSV(e.target.result);
+    if(!csvHeadersOK(rows)) return alert('Invalid template. Header must be exactly: "Site,PO,ID No,Vendor,Value".');
+    const body=rows.slice(1); const updates={};
+    body.forEach(cols=>{
+      const [Site,PO,IDNo,Vendor,Value]=cols;
+      if(PO && Site){ updates[PO]={Site,PO,IDNo,Vendor,Value:toNumberOrRaw(Value)}; }
     });
-
-    db.ref('master-po').update(updates)
-      .then(() => alert("Master PO upload complete"))
-      .catch(err => alert("Upload failed: " + err.message));
+    db.ref('master-po').update(updates).then(()=>alert("Master PO upload complete")).catch(err=>alert("Upload failed: "+err.message));
   };
   reader.readAsText(file);
 }
-
-function deleteAllMasterPO() {
-  if (!auth.currentUser) return alert("Login required.");
-  if (!confirm("Delete ALL master-po records?")) return;
-
-  db.ref('master-po').remove()
-    .then(() => alert("All master-po records deleted"))
-    .catch(err => alert(err.message));
+function deleteAllMasterPO(){
+  if(!auth.currentUser) return alert("Login required.");
+  if(!confirm("Delete ALL master-po records?")) return;
+  db.ref('master-po').remove().then(()=>alert("All master-po records deleted")).catch(err=>alert(err.message));
 }
 
-// ---------- UI: Format ----------
-function formatNumber(val) {
-  const num = parseFloat(val);
-  if (isNaN(num)) return val ?? "";
-  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// ---- RESULT COUNT (only shown when > 0) ----
-function updateResultCount() {
-  const count = document.querySelectorAll('#poTable tbody tr').length;
-  const el = document.getElementById('resultCount');
-  if (!el) return;
-  el.textContent = count > 0 ? `Total Results: ${count}` : '';
-}
-
-// ---- COLLECTION helpers ----
-function persistSelected() {
-  localStorage.setItem('selectedPOs', JSON.stringify(selectedPOs));
-  updateSelectedCount();
-}
-function updateSelectedCount() {
-  const btn = document.getElementById('viewCollectionBtn');
-  if (btn) btn.textContent = `View (${Object.keys(selectedPOs).length})`;
-}
-function addCheckedToCollection() {
-  const checks = document.querySelectorAll('#poTable tbody input.rowSelect:checked');
-  if (!checks.length) { alert("No rows selected."); return; }
-  checks.forEach(chk => {
-    const key = chk.getAttribute('data-key');
-    if (key && lastRenderedRows[key]) {
-      selectedPOs[key] = lastRenderedRows[key];
-    }
-  });
-  persistSelected();
-  // keep them checked
-}
-function viewCollection() {
-  const tbody = document.querySelector('#poTable tbody');
-  tbody.innerHTML = '';
-  Object.keys(selectedPOs).forEach(key => {
-    // render using the same renderer; checkboxes will appear checked automatically
-    const tr = renderRow(key, selectedPOs[key]);
-    tbody.appendChild(tr);
-  });
-  updateResultCount();
-}
-function clearCollection() {
-  if (!confirm("Clear all items in the collection?")) return;
-  selectedPOs = {};
-  persistSelected();
-
-  // Uncheck all checkboxes in current table
-  document.querySelectorAll('#poTable tbody input.rowSelect').forEach(chk => {
-    chk.checked = false;
-  });
-
-  updateResultCount();
-}
-// ---------- A–Z filter, search ----------
-function generateAZFilter() {
-  const container = document.getElementById("letterFilter");
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-  letters.forEach(letter => {
-    const btn = document.createElement("button");
-    btn.textContent = letter;
-    btn.onclick = () => filterByVendorLetter(letter);
-    container.appendChild(btn);
+// ---------- UI helpers ----------
+function formatNumber(val){ const num=parseFloat(val); if(isNaN(num)) return val??""; return num.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function generateAZFilter(){
+  const c=document.getElementById("letterFilter"); "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(letter=>{
+    const btn=document.createElement("button"); btn.textContent=letter; btn.onclick=()=>filterByVendorLetter(letter); c.appendChild(btn);
   });
 }
-
-function renderRow(childKey, data) {
-  // cache for later retrieval when adding to collection
-  lastRenderedRows[childKey] = data;
-
+function renderRow(childKey, data){
+  lastRenderedRows[childKey]=data;
   const checked = selectedPOs[childKey] ? 'checked' : '';
-  const tr = document.createElement('tr');
+  const tr=document.createElement('tr');
   tr.innerHTML =
     `<td><input type="checkbox" class="rowSelect" data-key="${childKey}" ${checked}></td>
-     <td>${data.Site || ""}</td>
-     <td>${data.PO || ""}</td>
-     <td>${data.IDNo || ""}</td>
-     <td>${data.Vendor || ""}</td>
+     <td>${data.Site||""}</td>
+     <td>${data.PO||""}</td>
+     <td>${data.IDNo||""}</td>
+     <td>${data.Vendor||""}</td>
      <td>${formatNumber(data.Value)}</td>
      <td><button onclick="showDeleteConfirm('${childKey}')">Delete</button></td>`;
   return tr;
 }
-
-function filterByVendorLetter(letter) {
-  currentVendorFilter = letter;
-  currentSearchTerm = "";
-  db.ref('records').once('value', snapshot => {
-    const tbody = document.querySelector('#poTable tbody');
-    tbody.innerHTML = '';
-    snapshot.forEach(child => {
-      const data = child.val();
-      if ((data.Vendor || "").toUpperCase().startsWith(letter)) {
-        tbody.appendChild(renderRow(child.key, data));
-      }
-    });
-    updateResultCount();
-  });
+function updateResultCount(){
+  const count=document.querySelectorAll('#poTable tbody tr').length;
+  const el=document.getElementById('resultCount');
+  if (el) el.textContent = count>0 ? `Total Results: ${count}` : '';
+  const bar=document.getElementById('noResultsBar');
+  if (bar) bar.classList.toggle('hidden', count!==0);
 }
 
-function searchRecords() {
-  currentSearchTerm = (document.getElementById('searchBox').value || "").toLowerCase();
-  currentVendorFilter = null;
-  db.ref('records').once('value', snapshot => {
-    const tbody = document.querySelector('#poTable tbody');
-    tbody.innerHTML = '';
-    snapshot.forEach(child => {
-      const d = child.val();
-      if (
-        (d.PO || "").toLowerCase().includes(currentSearchTerm) ||
-        (d.Site || "").toLowerCase().includes(currentSearchTerm) ||
-        (d.Vendor || "").toLowerCase().includes(currentSearchTerm) ||
-        (d.IDNo || "").toLowerCase().includes(currentSearchTerm)
-      ) {
-        tbody.appendChild(renderRow(child.key, d));
-      }
-    });
-    updateResultCount();
-  });
+// ---- COLLECTION helpers ----
+function persistSelected(){ localStorage.setItem('selectedPOs', JSON.stringify(selectedPOs)); updateSelectedCount(); }
+function updateSelectedCount(){ const btn=document.getElementById('viewCollectionBtn'); if(btn) btn.textContent=`View (${Object.keys(selectedPOs).length})`; }
+function addCheckedToCollection(){
+  const checks=document.querySelectorAll('#poTable tbody input.rowSelect:checked');
+  if(!checks.length){ alert("No rows selected."); return; }
+  checks.forEach(chk=>{ const key=chk.getAttribute('data-key'); if(key && lastRenderedRows[key]) selectedPOs[key]=lastRenderedRows[key]; });
+  persistSelected();
 }
+function viewCollection(){
+  const tbody=document.querySelector('#poTable tbody'); tbody.innerHTML='';
+  Object.keys(selectedPOs).forEach(key=>tbody.appendChild(renderRow(key, selectedPOs[key])));
+  updateResultCount();
+}
+function clearCollection() {
+  if (!confirm("Clear all items in the collection?")) return;
 
-function clearSearch() {
-  currentSearchTerm = "";
-  currentVendorFilter = null;
-  document.getElementById('searchBox').value = '';
-  document.querySelector('#poTable tbody').innerHTML = '';
+  // reset stored collection
+  selectedPOs = {};
+  persistSelected();
+
+  // clear any checkboxes (if rows still present)
+  document.querySelectorAll('#poTable tbody input.rowSelect').forEach(chk => chk.checked = false);
+
+  // ✅ also clear the table UI
+  const tbody = document.querySelector('#poTable tbody');
+  if (tbody) tbody.innerHTML = '';
+
+  // hide the no-results WhatsApp bar (same behavior as after sending)
+  const bar = document.getElementById('noResultsBar');
+  if (bar) bar.classList.add('hidden');
+
   updateResultCount();
 }
 
-let deleteKeyPending = null;
-function showDeleteConfirm(key) {
-  deleteKeyPending = key;
-  document.getElementById("deleteConfirmModal").classList.remove("hidden");
-}
-function proceedDelete() {
-  if (deleteKeyPending) {
-    deleteRecord(deleteKeyPending);
-    deleteKeyPending = null;
-  }
-  document.getElementById("deleteConfirmModal").classList.add("hidden");
-}
-function cancelDelete() {
-  deleteKeyPending = null;
-  document.getElementById("deleteConfirmModal").classList.add("hidden");
+
+// ---------- Search / Filter ----------
+function filterByVendorLetter(letter){
+  currentVendorFilter=letter; currentSearchTerm="";
+  db.ref('records').once('value', snap=>{
+    const tbody=document.querySelector('#poTable tbody'); tbody.innerHTML='';
+    snap.forEach(child=>{ const d=child.val(); if((d.Vendor||"").toUpperCase().startsWith(letter)) tbody.appendChild(renderRow(child.key,d)); });
+    updateResultCount();
+  });
 }
 
-function deleteRecord(key) {
-  if (auth.currentUser) {
-    db.ref('records/' + key).remove().then(() => {
-      // also remove from collection if present
-      if (selectedPOs[key]) {
-        delete selectedPOs[key];
-        persistSelected();
+function searchRecords(){
+  currentSearchTerm=(document.getElementById('searchBox').value||"").toLowerCase();
+  lastSearchPO = document.getElementById('searchBox').value || "";
+  currentVendorFilter=null;
+
+  db.ref('records').once('value', snapshot=>{
+    const tbody=document.querySelector('#poTable tbody'); tbody.innerHTML='';
+    snapshot.forEach(child=>{
+      const d=child.val();
+      if(
+        (d.PO||"").toLowerCase().includes(currentSearchTerm) ||
+        (d.Site||"").toLowerCase().includes(currentSearchTerm) ||
+        (d.Vendor||"").toLowerCase().includes(currentSearchTerm) ||
+        (d.IDNo||"").toLowerCase().includes(currentSearchTerm)
+      ){
+        tbody.appendChild(renderRow(child.key,d));
       }
+    });
+    updateResultCount();
+  });
+}
 
-      if (currentVendorFilter) filterByVendorLetter(currentVendorFilter);
-      else if (currentSearchTerm !== "") searchRecords();
+function clearSearch(){
+  currentSearchTerm=""; currentVendorFilter=null;
+  document.getElementById('searchBox').value='';
+  document.querySelector('#poTable tbody').innerHTML='';
+  updateResultCount();
+}
+
+// ---------- Delete flow ----------
+let deleteKeyPending=null;
+function showDeleteConfirm(key){ deleteKeyPending=key; document.getElementById("deleteConfirmModal").classList.remove("hidden"); }
+function proceedDelete(){
+  if(deleteKeyPending){ deleteRecord(deleteKeyPending); deleteKeyPending=null; }
+  document.getElementById("deleteConfirmModal").classList.add("hidden");
+}
+function cancelDelete(){ deleteKeyPending=null; document.getElementById("deleteConfirmModal").classList.add("hidden"); }
+function deleteRecord(key){
+  if(auth.currentUser){
+    db.ref('records/'+key).remove().then(()=>{
+      if(selectedPOs[key]){ delete selectedPOs[key]; persistSelected(); }
+      if(currentVendorFilter) filterByVendorLetter(currentVendorFilter);
+      else if(currentSearchTerm!=="") searchRecords();
       else clearSearch();
-    }).catch(err => alert(err.message));
-  } else {
-    alert("Only admin can delete");
-  }
+    }).catch(err=>alert(err.message));
+  } else { alert("Only admin can delete"); }
 }
 
 // ---------- Menu / Tabs ----------
-function toggleMenu() {
-  const menu = document.getElementById('sideMenu');
-  menu.classList.toggle('show');
-}
-
-function showTab(tabId) {
-  document.querySelectorAll('.tabContent').forEach(tab => tab.classList.add('hidden'));
+function toggleMenu(){ document.getElementById('sideMenu').classList.toggle('show'); }
+function showTab(tabId){
+  document.querySelectorAll('.tabContent').forEach(tab=>tab.classList.add('hidden'));
   document.getElementById(tabId).classList.remove('hidden');
-  const menu = document.getElementById('sideMenu');
-  if (menu.classList.contains('show')) menu.classList.remove('show');
+  const menu=document.getElementById('sideMenu'); if(menu.classList.contains('show')) menu.classList.remove('show');
 }
+document.getElementById("searchBox").addEventListener("keyup", e=>{ if(e.key==="Enter"){ searchRecords(); document.getElementById('searchBox').value=''; } });
 
-// Search Enter
-document.getElementById("searchBox").addEventListener("keyup", function(event) {
-  if (event.key === "Enter") {
-    searchRecords();
-    document.getElementById('searchBox').value = '';
-  }
-});
-
-window.onload = () => {
-  generateAZFilter();
-  updateSelectedCount(); // show persisted count on load
-};
+window.onload = ()=>{ generateAZFilter(); updateSelectedCount(); };
 
 // ---------- Login modal ----------
-function toggleLoginModal() {
-  document.getElementById('loginModal').classList.toggle('hidden');
-}
-function popupLogin() {
-  const email = document.getElementById('popupEmail').value;
-  const pass = document.getElementById('popupPassword').value;
-  auth.signInWithEmailAndPassword(email, pass)
-    .then(() => toggleLoginModal())
-    .catch(err => alert("Login failed: " + err.message));
+function toggleLoginModal(){ document.getElementById('loginModal').classList.toggle('hidden'); }
+function popupLogin(){
+  const email=document.getElementById('popupEmail').value;
+  const pass=document.getElementById('popupPassword').value;
+  auth.signInWithEmailAndPassword(email, pass).then(()=>toggleLoginModal()).catch(err=>alert("Login failed: "+err.message));
 }
 
 // ---------- Add PO from master-po ----------
-function promptAddPO() {
-  if (!auth.currentUser) return alert("Only admin can add PO");
-
-  const po = prompt("Enter PO number to add:");
-  if (!po) return;
-
-  const masterRef = db.ref('master-po/' + po);
-  const recordsRef = db.ref('records');
-
-  masterRef.once('value').then(snapshot => {
-    if (!snapshot.exists()) return alert("PO not found in master list");
-
-    recordsRef.orderByChild("PO").equalTo(po).once('value', recordSnap => {
-      if (recordSnap.exists()) return alert("PO already exists in records");
-
-      const data = snapshot.val();
-      // Save and use the actual pushed key so checkbox + collection work correctly
-      const newRef = recordsRef.push();
-      newRef.set(data).then(() => {
+function promptAddPO(){
+  if(!auth.currentUser) return alert("Only admin can add PO");
+  const po=prompt("Enter PO number to add:"); if(!po) return;
+  const masterRef=db.ref('master-po/'+po); const recordsRef=db.ref('records');
+  masterRef.once('value').then(snap=>{
+    if(!snap.exists()) return alert("PO not found in master list");
+    recordsRef.orderByChild("PO").equalTo(po).once('value', rSnap=>{
+      if(rSnap.exists()) return alert("PO already exists in records");
+      const data=snap.val(); const newRef=recordsRef.push();
+      newRef.set(data).then(()=>{
         alert("PO added to records");
-        const tbody = document.querySelector('#poTable tbody');
+        const tbody=document.querySelector('#poTable tbody');
         tbody.appendChild(renderRow(newRef.key, data));
         updateResultCount();
       });
@@ -388,26 +272,44 @@ function promptAddPO() {
   });
 }
 
-// expose needed fns to window
-window.login = login;
-window.logout = logout;
-window.toggleLoginModal = toggleLoginModal;
-window.popupLogin = popupLogin;
-window.toggleMenu = toggleMenu;
-window.showTab = showTab;
-window.searchRecords = searchRecords;
-window.clearSearch = clearSearch;
-window.showDeleteConfirm = showDeleteConfirm;
-window.proceedDelete = proceedDelete;
-window.cancelDelete = cancelDelete;
-window.promptAddPO = promptAddPO;
+// ---------- WhatsApp request (auto) ----------
+function normalizeWhatsAppNumber(num){
+  const digits=(num||"").replace(/\D/g,'');
+  return digits.length===8 ? '974'+digits : digits; // auto +974 for local 8-digit numbers
+}
 
-window.uploadCSV = uploadCSV;
-window.uploadMasterPO = uploadMasterPO;
-window.deleteAllMasterPO = deleteAllMasterPO;
-window.downloadMainTemplate = downloadMainTemplate;
-window.downloadMasterTemplate = downloadMasterTemplate;
+async function sendWhatsAppRequestAuto() {
+  const po = (lastSearchPO || document.getElementById('searchBox').value || "").trim();
+  if (!po) { alert("Please enter a PO number first."); return; }
 
-window.addCheckedToCollection = addCheckedToCollection;
-window.viewCollection = viewCollection;
-window.clearCollection = clearCollection;
+  try {
+    // get Vendor from master-po/{po}
+    const snap = await firebase.database().ref('master-po/' + po).once('value');
+    const data = snap.val() || {};
+    const vendor = data.Vendor || "";
+
+    const target = normalizeWhatsAppNumber(WHATSAPP_REQUEST_NUMBER);
+    const text = `Requesting original for the following:\nPO: ${po}\nVendor: ${vendor || '-'}`;
+    const url = `https://wa.me/${target}?text=${encodeURIComponent(text)}`;
+
+    window.open(url, '_blank');
+
+    // ✅ Hide request button after sending
+    document.getElementById('noResultsBar').classList.add('hidden');
+
+  } catch (e) {
+    alert("Could not prepare the WhatsApp message: " + e.message);
+  }
+}
+
+// expose
+window.login=login; window.logout=logout;
+window.toggleLoginModal=toggleLoginModal; window.popupLogin=popupLogin;
+window.toggleMenu=toggleMenu; window.showTab=showTab;
+window.searchRecords=searchRecords; window.clearSearch=clearSearch;
+window.showDeleteConfirm=showDeleteConfirm; window.proceedDelete=proceedDelete; window.cancelDelete=cancelDelete;
+window.promptAddPO=promptAddPO;
+window.uploadCSV=uploadCSV; window.uploadMasterPO=uploadMasterPO; window.deleteAllMasterPO=deleteAllMasterPO;
+window.downloadMainTemplate=downloadMainTemplate; window.downloadMasterTemplate=downloadMasterTemplate;
+window.addCheckedToCollection=addCheckedToCollection; window.viewCollection=viewCollection; window.clearCollection=clearCollection;
+window.sendWhatsAppRequestAuto=sendWhatsAppRequestAuto;
