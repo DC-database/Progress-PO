@@ -9,84 +9,86 @@
 <body>
   <div class="page-background">
     <div class="page-container">
-  <div class="hamburger-menu">
-    <button onclick="toggleMenu()">☰</button>
-    <div id="sideMenu">
-      <button onclick="showTab('mainTab')">Main</button>
-      <button onclick="showTab('adminTab')">Admin</button>
-    </div>
-  </div>
+      <div class="hamburger-menu">
+        <button onclick="toggleMenu()">☰</button>
+        <div id="sideMenu">
+          <button onclick="showTab('mainTab')">Main</button>
+          <button onclick="showTab('adminTab')">Admin</button>
+        </div>
+      </div>
 
-  <div id="mainTab" class="tabContent">
-    <h1>Progress PO Records</h1>
-    <div class="az-filter">
-      <span>Filter by Vendor:</span>
-      <div id="letterFilter"></div>
-    </div>
-    <input type="text" id="searchBox" placeholder="Search by PO" />
-    <button onclick="searchRecords()">Search</button>
-    <button onclick="clearSearch()">Clear</button>
-    <button onclick="promptAddPO()">Add PO</button>
-<button id="loginBtn" onclick="toggleLoginModal()">Login</button>
-    <table id="poTable">
-      <thead>
-        <tr>
-          <th>Site</th><th>PO</th><th>ID No</th><th>Vendor</th><th>Value</th><th>Action</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
+      <div id="mainTab" class="tabContent">
+        <h1>Progress PO Records</h1>
 
-  <div id="adminTab" class="tabContent hidden">
-    <h2>Admin Login</h2>
-    <input type="email" id="email" placeholder="Email" />
-    <input type="password" id="password" placeholder="Password" />
-    <button onclick="login()">Login</button>
-    <button onclick="logout()">Logout</button>
+        <div class="az-filter">
+          <span>Filter by Vendor:</span>
+          <div id="letterFilter"></div>
+        </div>
 
-    <div id="adminSection" class="hidden">
+        <input type="text" id="searchBox" placeholder="Search by PO" />
+        <button onclick="searchRecords()">Search</button>
+        <button onclick="clearSearch()">Clear</button>
+        <button onclick="promptAddPO()">Add PO</button>
+        <button id="loginBtn" onclick="toggleLoginModal()">Login</button>
 
-<h3>Upload Master PO (Admin Only)</h3>
-<input type="file" id="masterUpload" />
-<button onclick="uploadMasterPO()">Upload Master PO</button>
-<button onclick="downloadMasterTemplate()">Download Master Template</button>
-<button onclick="deleteAllMasterPO()">Delete All Master PO</button>
+        <!-- Result count (appears only when > 0) -->
+        <div id="resultCount" style="text-align:right; font-weight:bold; margin-top:10px;"></div>
 
-<h2>Admin Panel</h2>
-<input type="file" id="csvUpload" />
-<button onclick="uploadCSV()">Upload CSV</button>
-<button onclick="downloadMainTemplate()">Download Main Template</button>
+        <table id="poTable">
+          <thead>
+            <tr>
+              <th>Site</th><th>PO</th><th>ID No</th><th>Vendor</th><th>Value</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
 
-    </div>
-  </div>
+      <div id="adminTab" class="tabContent hidden">
+        <h2>Admin Login</h2>
+        <input type="email" id="email" placeholder="Email" />
+        <input type="password" id="password" placeholder="Password" />
+        <button onclick="login()">Login</button>
+        <button onclick="logout()">Logout</button>
 
-  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-storage-compat.js"></script>
-  <script src="app.js"></script>
+        <div id="adminSection" class="hidden">
+          <h3>Upload Master PO (Admin Only)</h3>
+          <input type="file" id="masterUpload" />
+          <button onclick="uploadMasterPO()">Upload Master PO</button>
+          <button onclick="downloadMasterTemplate()">Download Master Template</button>
+          <button onclick="deleteAllMasterPO()">Delete All Master PO</button>
 
-<div id="loginModal" class="modal hidden">
-  <div class="modal-content">
-    <span class="close" onclick="toggleLoginModal()">&times;</span>
-    <h3>Login</h3>
-    <input type="email" id="popupEmail" placeholder="Email" />
-    <input type="password" id="popupPassword" placeholder="Password" />
-    <button onclick="popupLogin()">Login</button>
-  </div>
-</div>
+          <h2>Admin Panel</h2>
+          <input type="file" id="csvUpload" />
+          <button onclick="uploadCSV()">Upload CSV</button>
+          <button onclick="downloadMainTemplate()">Download Main Template</button>
+        </div>
+      </div>
 
-<div id="deleteConfirmModal" class="modal hidden">
-  <div class="modal-content">
-    <p>Are you sure you want to delete this record?</p>
-    <button onclick="proceedDelete()">Proceed</button>
-    <button onclick="cancelDelete()">Cancel</button>
-  </div>
-</div>
+      <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+      <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+      <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+      <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-storage-compat.js"></script>
+      <script src="app.js"></script>
+
+      <div id="loginModal" class="modal hidden">
+        <div class="modal-content">
+          <span class="close" onclick="toggleLoginModal()">&times;</span>
+          <h3>Login</h3>
+          <input type="email" id="popupEmail" placeholder="Email" />
+          <input type="password" id="popupPassword" placeholder="Password" />
+          <button onclick="popupLogin()">Login</button>
+        </div>
+      </div>
+
+      <div id="deleteConfirmModal" class="modal hidden">
+        <div class="modal-content">
+          <p>Are you sure you want to delete this record?</p>
+          <button onclick="proceedDelete()">Proceed</button>
+          <button onclick="cancelDelete()">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 </body>
-
-
 </html>

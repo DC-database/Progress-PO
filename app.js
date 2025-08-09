@@ -120,8 +120,6 @@ function uploadMasterPO() {
       return alert('Invalid template. Header must be exactly: "Site,PO,ID No,Vendor,Value".');
     }
 
-    // NOTE: Your DB rules currently require a specific admin UID.
-    // If upload fails with PERMISSION_DENIED, confirm UID or loosen the rule.
     const uid = auth.currentUser?.uid || "";
     console.log("Current UID:", uid);
 
@@ -180,6 +178,14 @@ function renderRow(childKey, data) {
   return tr;
 }
 
+// ---- RESULT COUNT (only shown when > 0) ----
+function updateResultCount() {
+  const count = document.querySelectorAll('#poTable tbody tr').length;
+  const el = document.getElementById('resultCount');
+  if (!el) return;
+  el.textContent = count > 0 ? `Total Results: ${count}` : '';
+}
+
 function filterByVendorLetter(letter) {
   currentVendorFilter = letter;
   currentSearchTerm = "";
@@ -192,6 +198,7 @@ function filterByVendorLetter(letter) {
         tbody.appendChild(renderRow(child.key, data));
       }
     });
+    updateResultCount();
   });
 }
 
@@ -212,6 +219,7 @@ function searchRecords() {
         tbody.appendChild(renderRow(child.key, d));
       }
     });
+    updateResultCount();
   });
 }
 
@@ -220,6 +228,7 @@ function clearSearch() {
   currentVendorFilter = null;
   document.getElementById('searchBox').value = '';
   document.querySelector('#poTable tbody').innerHTML = '';
+  updateResultCount();
 }
 
 let deleteKeyPending = null;
@@ -307,6 +316,7 @@ function promptAddPO() {
         alert("PO added to records");
         const tbody = document.querySelector('#poTable tbody');
         tbody.appendChild(renderRow("temp", data));
+        updateResultCount();
       });
     });
   });
