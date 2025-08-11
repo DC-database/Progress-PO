@@ -223,15 +223,23 @@ function proceedDelete(){
 }
 function cancelDelete(){ deleteKeyPending=null; document.getElementById("deleteConfirmModal").classList.add("hidden"); }
 function deleteRecord(key){
-  if(auth.currentUser){
-    db.ref('records/'+key).remove().then(()=>{
-      if(selectedPOs[key]){ delete selectedPOs[key]; persistSelected(); }
-      if(currentVendorFilter) filterByVendorLetter(currentVendorFilter);
-      else if(currentSearchTerm!=="") searchRecords();
-      else clearSearch();
-    }).catch(err=>alert(err.message));
-  } else { alert("Only admin can delete"); }
+  if(!auth.currentUser){ alert("Only admin can delete"); return; }
+
+  db.ref('records/' + key).remove().then(() => {
+    // keep local caches in sync
+    if (selectedPOs[key]) { delete selectedPOs[key]; persistSelected(); }
+    if (lastRenderedRows[key]) { delete lastRenderedRows[key]; }
+
+    // remove just the deleted row from the current table (no refresh)
+    const rowCheckbox = document.querySelector(`#poTable tbody input.rowSelect[data-key="${key}"]`);
+    const row = rowCheckbox ? rowCheckbox.closest('tr') : null;
+    if (row) row.remove();
+
+    // update counts / empty-state UI
+    updateResultCount();
+  }).catch(err => alert(err.message));
 }
+
 
 // ---------- Menu / Tabs ----------
 function toggleMenu(){ document.getElementById('sideMenu').classList.toggle('show'); }
