@@ -280,6 +280,54 @@ function promptAddPO(){
   });
 }
 
+
+// ---------- Add PO modal (multi-add) ----------
+function openAddPOModal(){
+  if (!auth.currentUser) { alert("Only admin can add PO"); return; }
+  var m = document.getElementById('addPOModal');
+  if (m) m.classList.remove('hidden');
+  var inp = document.getElementById('addPOInput');
+  var stat = document.getElementById('addPOStatus');
+  if (stat) stat.textContent = "";
+  if (inp) { inp.value = ""; setTimeout(function(){inp.focus();}, 0); }
+}
+function closeAddPOModal(){
+  var m = document.getElementById('addPOModal');
+  if (m) m.classList.add('hidden');
+}
+function addPOFromModal(){
+  if (!auth.currentUser) { alert("Only admin can add PO"); return; }
+  var inp = document.getElementById('addPOInput');
+  var stat = document.getElementById('addPOStatus');
+  var po = (inp && inp.value ? inp.value : "").trim();
+  if (!po) { if (stat) stat.textContent = "Please enter a PO number."; return; }
+
+  var masterRef = db.ref('master-po/' + po);
+  var recRef = db.ref('records');
+
+  masterRef.once('value').then(function(masterSnap){
+    if (!masterSnap.exists()) { if (stat) stat.textContent = "PO " + po + " not found in master-po."; return; }
+    return recRef.orderByChild("PO").equalTo(po).once('value').then(function(existsSnap){
+      if (existsSnap.exists()) { if (stat) stat.textContent = "PO " + po + " already exists in records."; return; }
+      var data = masterSnap.val();
+      var newRef = recRef.push();
+      return newRef.set(data).then(function(){
+        var tbody = document.querySelector('#poTable tbody');
+        if (tbody && typeof renderRow === 'function') { tbody.appendChild(renderRow(newRef.key, data)); updateResultCount && updateResultCount(); }
+        if (stat) stat.textContent = "Added PO " + po + " ✔";
+        if (inp) { inp.value = ""; inp.focus(); }
+      });
+    });
+  }).catch(function(e){
+    if (stat) stat.textContent = "Error: " + e.message;
+  });
+}
+// optional: Enter to add quick
+document.addEventListener('keydown', function(e){
+  var modal = document.getElementById('addPOModal');
+  if (!modal || modal.classList.contains('hidden')) return;
+  if (e.key === 'Enter') addPOFromModal();
+});
 // ---------- WhatsApp request (auto) ----------
 function normalizeWhatsAppNumber(num){
   const digits=(num||"").replace(/\D/g,'');
@@ -316,7 +364,7 @@ window.toggleLoginModal=toggleLoginModal; window.popupLogin=popupLogin;
 window.toggleMenu=toggleMenu; window.showTab=showTab;
 window.searchRecords=searchRecords; window.clearSearch=clearSearch;
 window.showDeleteConfirm=showDeleteConfirm; window.proceedDelete=proceedDelete; window.cancelDelete=cancelDelete;
-window.promptAddPO=promptAddPO;
+window.promptAddPO=promptAddPO; window.openAddPOModal=openAddPOModal; window.closeAddPOModal=closeAddPOModal; window.addPOFromModal=addPOFromModal;
 window.uploadCSV=uploadCSV; window.uploadMasterPO=uploadMasterPO; window.deleteAllMasterPO=deleteAllMasterPO;
 window.downloadMainTemplate=downloadMainTemplate; window.downloadMasterTemplate=downloadMasterTemplate;
 window.addCheckedToCollection=addCheckedToCollection; window.viewCollection=viewCollection; window.clearCollection=clearCollection;
