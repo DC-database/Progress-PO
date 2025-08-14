@@ -308,7 +308,7 @@ function addPOFromModal(){
   masterRef.once('value').then(function(masterSnap){
     if (!masterSnap.exists()) { if (stat) stat.textContent = "PO " + po + " not found in master-po."; return; }
     return recRef.orderByChild("PO").equalTo(po).once('value').then(function(existsSnap){
-      if (existsSnap.exists()) { if (stat) stat.textContent = "PO " + po + " already exists in records."; return; }
+      if (existsSnap.exists()) { if (stat) stat.textContent = "PO " + po + " already exists in records."; if (inp) { inp.value = ""; inp.focus(); } return; }
       var data = masterSnap.val();
       var newRef = recRef.push();
       return newRef.set(data).then(function(){
